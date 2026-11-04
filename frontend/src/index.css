@@ -4,6 +4,7 @@
   background: #f5f6f1;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -13,4 +14,17 @@
 body {
   margin: 0;
   min-width: 320px;
+}
+
+button {
+  font: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #527a38;
+  outline-offset: 4px;
 }
