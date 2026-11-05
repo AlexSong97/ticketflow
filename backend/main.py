@@ -1,4 +1,10 @@
+import logging
+import os
+from contextlib import contextmanager
+
+import psycopg
 from fastapi import FastAPI, HTTPException
+from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 
@@ -7,6 +13,8 @@ app = FastAPI(
     description="Backend API for event discovery and seat selection.",
     version="0.1.0",
 )
+
+logger = logging.getLogger(__name__)
 
 
 class HealthResponse(BaseModel):
@@ -27,78 +35,87 @@ class Seat(BaseModel):
     is_reserved: bool
 
 
-# Demo data will be replaced with PostgreSQL records later.
-EVENTS = [
-    TicketEvent(
-        id=1,
-        title="Midnight Sessions",
-        date="December 12, 2026 · 7:30 PM",
-        venue="Orlando · Main Hall",
-        price=45,
-    ),
-    TicketEvent(
-        id=2,
-        title="Sunday in Blue",
-        date="December 20, 2026 · 6:00 PM",
-        venue="Orlando · Studio B",
-        price=32,
-    ),
-]
+@contextmanager
+def open_database():
+    database_url = os.environ.get("DATABASE_URL")
 
-RESERVED_SEATS_BY_EVENT: dict[int, set[str]] = {
-    1: {"A3", "B5", "C2"},
-    2: {"A1", "A2", "C6"},
-}
+    if not database_url:
+        logger.error("DATABASE_URL is not configured")
+        raise HTTPException(
+            status_code=503,
+            detail="Database is not configured",
+        )
 
-
-def find_event(event_id: int) -> TicketEvent:
-    for event in EVENTS:
-        if event.id == event_id:
-            return event
-
-    raise HTTPException(
-        status_code=404,
-        detail="Event not found",
-    )
+    try:
+        # Close the connection when the request finishes.
+        with psycopg.connect(
+            database_url,
+            row_factory=dict_row,
+            connect_timeout=3,
+        ) as connection:
+            yield connection
+    except psycopg.OperationalError:
+        logger.exception("PostgreSQL connection failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Database is unavailable",
+        ) from None
 
 
-def create_seats(event_id: int) -> list[Seat]:
-    reserved_labels = RESERVED_SEATS_BY_EVENT.get(event_id, set())
-    seats = []
+def find_event(connection, event_id: int):
+    event = connection.execute(
+        """
+        SELECT id, title, date, venue, price
+        FROM events
+        WHERE id = %s
+        """,
+        (event_id,),
+    ).fetchone()
 
-    for row in ["A", "B", "C", "D"]:
-        for number in range(1, 9):
-            label = f"{row}{number}"
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
 
-            seats.append(
-                Seat(
-                    id=f"{event_id}-{label}",
-                    label=label,
-                    is_reserved=label in reserved_labels,
-                )
-            )
-
-    return seats
+    return event
 
 
 @app.get("/api/health", response_model=HealthResponse)
-def health_check() -> HealthResponse:
-    return HealthResponse(status="ok")
+def health_check():
+    with open_database() as connection:
+        connection.execute("SELECT 1")
+
+    return {"status": "ok"}
 
 
 @app.get("/api/events", response_model=list[TicketEvent])
-def list_events() -> list[TicketEvent]:
-    return EVENTS
+def list_events():
+    with open_database() as connection:
+        return connection.execute(
+            """
+            SELECT id, title, date, venue, price
+            FROM events
+            ORDER BY id
+            """
+        ).fetchall()
 
 
 @app.get("/api/events/{event_id}", response_model=TicketEvent)
-def get_event(event_id: int) -> TicketEvent:
-    return find_event(event_id)
+def get_event(event_id: int):
+    with open_database() as connection:
+        return find_event(connection, event_id)
 
 
 @app.get("/api/events/{event_id}/seats", response_model=list[Seat])
-def list_event_seats(event_id: int) -> list[Seat]:
-    # Reject unknown events before generating their seating chart.
-    find_event(event_id)
+def list_event_seats(event_id: int):
+    with open_database() as connection:
+        find_event(connection, event_id)
 
-    return create_seats(event_id)
+        # Keep the existing API seat ID format, such as "1-A3".
+        return connection.execute(
+            """
+            SELECT event_id::TEXT || '-' || label AS id, label, is_reserved
+            FROM seats
+            WHERE event_id = %s
+            ORDER BY label
+            """,
+            (event_id,),
+        ).fetchall()
