@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import AuthPanel from './AuthPanel'
 
 type TicketEvent = {
   id: number
@@ -32,6 +33,7 @@ function useApi<T>(path: string) {
   const [state, setState] = useState<ApiState<T>>({
     status: 'loading',
   })
+
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -53,14 +55,19 @@ function useApi<T>(path: string) {
         })
 
         if (!response.ok) {
-          throw new Error(`Request failed (HTTP ${response.status}).`)
+          throw new Error(
+            `Request failed (HTTP ${response.status}).`,
+          )
         }
 
         const data: T = await response.json()
 
         // Ignore results from an unmounted or superseded request.
         if (!disposed) {
-          setState({ status: 'success', data })
+          setState({
+            status: 'success',
+            data,
+          })
         }
       } catch (error: unknown) {
         if (disposed) {
@@ -73,7 +80,10 @@ function useApi<T>(path: string) {
             ? error.message
             : 'Unable to load data.'
 
-        setState({ status: 'error', message })
+        setState({
+          status: 'error',
+          message,
+        })
       } finally {
         window.clearTimeout(timeoutId)
       }
@@ -101,13 +111,18 @@ type RequestErrorProps = {
   onRetry: () => void
 }
 
-function RequestError({ message, onRetry }: RequestErrorProps) {
+function RequestError({
+  message,
+  onRetry,
+}: RequestErrorProps) {
   return (
     <div role="alert">
       <p>{message}</p>
+
       <p className="seat-description">
         Check that the backend is running, then try again.
       </p>
+
       <button
         type="button"
         className="event-button"
@@ -128,9 +143,8 @@ function SeatPicker({ event }: SeatPickerProps) {
     `/api/events/${event.id}/seats`,
   )
 
-  const [selectedSeatId, setSelectedSeatId] = useState<string | null>(
-    null,
-  )
+  const [selectedSeatId, setSelectedSeatId] =
+    useState<string | null>(null)
 
   if (state.status === 'loading') {
     return (
@@ -150,8 +164,10 @@ function SeatPicker({ event }: SeatPickerProps) {
   }
 
   const seats = state.data
+
   const selectedSeat = seats.find(
-    (seat) => seat.id === selectedSeatId && !seat.is_reserved,
+    (seat) =>
+      seat.id === selectedSeatId && !seat.is_reserved,
   )
 
   function handleSelectSeat(seat: Seat) {
@@ -174,7 +190,10 @@ function SeatPicker({ event }: SeatPickerProps) {
 
   return (
     <>
-      <p className="selected-event-title">{event.title}</p>
+      <p className="selected-event-title">
+        {event.title}
+      </p>
+
       <p className="seat-description">
         Select one available seat below.
       </p>
@@ -210,17 +229,22 @@ function SeatPicker({ event }: SeatPickerProps) {
           <i className="legend-box legend-available" />
           Available
         </span>
+
         <span>
           <i className="legend-box legend-selected" />
           Selected
         </span>
+
         <span>
           <i className="legend-box legend-reserved" />
           Reserved
         </span>
       </div>
 
-      <div className="booking-summary" aria-live="polite">
+      <div
+        className="booking-summary"
+        aria-live="polite"
+      >
         <h3>Your selection</h3>
 
         <dl>
@@ -231,13 +255,17 @@ function SeatPicker({ event }: SeatPickerProps) {
 
           <div className="summary-row">
             <dt>Seat</dt>
-            <dd>{selectedSeat?.label ?? 'Not selected'}</dd>
+            <dd>
+              {selectedSeat?.label ?? 'Not selected'}
+            </dd>
           </div>
 
           <div className="summary-row summary-total">
             <dt>Total</dt>
             <dd>
-              {formatPrice(selectedSeat ? event.price : 0)}
+              {formatPrice(
+                selectedSeat ? event.price : 0,
+              )}
             </dd>
           </div>
         </dl>
@@ -254,20 +282,24 @@ function SeatPicker({ event }: SeatPickerProps) {
       </div>
 
       <p className="demo-note">
-        Demo availability is loaded from the API. Selecting a seat
-        does not reserve it. Selections reset when you refresh the page.
+        Demo availability is loaded from the API.
+        Selecting a seat does not reserve it.
+        Selections reset when you refresh the page.
       </p>
     </>
   )
 }
 
 function App() {
-  const { state, retry } = useApi<TicketEvent[]>('/api/events')
-  const [selectedEventId, setSelectedEventId] = useState<number | null>(
-    null,
-  )
+  const { state, retry } =
+    useApi<TicketEvent[]>('/api/events')
 
-  const events = state.status === 'success' ? state.data : []
+  const [selectedEventId, setSelectedEventId] =
+    useState<number | null>(null)
+
+  const events =
+    state.status === 'success' ? state.data : []
+
   const selectedEvent = events.find(
     (event) => event.id === selectedEventId,
   )
@@ -277,12 +309,18 @@ function App() {
       <header className="page-header">
         <p className="brand">TICKETFLOW</p>
         <h1>Find your next live experience.</h1>
-        <p className="subtitle">Discover events in Orlando.</p>
+        <p className="subtitle">
+          Discover events in Orlando.
+        </p>
       </header>
+
+      <AuthPanel />
 
       <div className="booking-layout">
         <section aria-labelledby="events-heading">
-          <h2 id="events-heading">Upcoming events</h2>
+          <h2 id="events-heading">
+            Upcoming events
+          </h2>
 
           {state.status === 'loading' && (
             <p className="empty-state" role="status">
@@ -297,23 +335,29 @@ function App() {
             />
           )}
 
-          {state.status === 'success' && events.length === 0 && (
-            <p className="empty-state">
-              No upcoming events. Please check back later.
-            </p>
-          )}
+          {state.status === 'success' &&
+            events.length === 0 && (
+              <p className="empty-state">
+                No upcoming events.
+                Please check back later.
+              </p>
+            )}
 
           {state.status === 'success' && (
             <div className="event-list">
               {events.map((event) => {
-                const isSelected = selectedEventId === event.id
+                const isSelected =
+                  selectedEventId === event.id
 
                 return (
                   <article
                     className={`event-card ${isSelected ? 'event-card-selected' : ''}`}
                     key={event.id}
                   >
-                    <p className="event-date">{event.date}</p>
+                    <p className="event-date">
+                      {event.date}
+                    </p>
+
                     <h3>{event.title}</h3>
                     <p>{event.venue}</p>
 
@@ -326,9 +370,13 @@ function App() {
                         type="button"
                         className="event-button"
                         aria-pressed={isSelected}
-                        onClick={() => setSelectedEventId(event.id)}
+                        onClick={() =>
+                          setSelectedEventId(event.id)
+                        }
                       >
-                        {isSelected ? 'Selected' : 'Choose seats'}
+                        {isSelected
+                          ? 'Selected'
+                          : 'Choose seats'}
                       </button>
                     </div>
                   </article>
@@ -342,7 +390,9 @@ function App() {
           className="seat-panel"
           aria-labelledby="seats-heading"
         >
-          <h2 id="seats-heading">Choose your seat</h2>
+          <h2 id="seats-heading">
+            Choose your seat
+          </h2>
 
           {selectedEvent ? (
             // A new event gets fresh selection state and cancels the old request.
